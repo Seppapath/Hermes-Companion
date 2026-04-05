@@ -1,0 +1,32 @@
+{
+  "name": "hermes-companion",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
+    "prepare:resources": "node scripts/prepare-resources.mjs",
+    "release:validate": "node scripts/validate-release-env.mjs all",
+    "release:config": "node scripts/generate-release-config.mjs",
+    "release:manifest": "node scripts/generate-release-manifest.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.10.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/node": "^24.12.0",
+    "svelte": "^5.53.12",
+    "svelte-check": "^4.4.5",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.1"
+  }
+}

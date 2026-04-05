@@ -1,0 +1,27 @@
+[Unit]
+Description=Hermes Companion Reference Central API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes-companion
+Group=hermes-companion
+WorkingDirectory=/opt/hermes-companion
+EnvironmentFile=/etc/hermes-companion/central-api.env
+ExecStart=/opt/hermes-companion/.venv/bin/python -m uvicorn --app-dir /opt/hermes-companion/central-api server:app --host 127.0.0.1 --port 8011 --workers 1
+Restart=always
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/hermes-companion
+
+[Install]
+WantedBy=multi-user.target

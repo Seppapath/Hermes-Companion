@@ -1,0 +1,18 @@
+[Unit]
+Description=Hermes Companion Node Daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/hermes-companion/daemon/bin/hermes-node-daemon --config %h/.local/share/hermes-companion/daemon/daemon-config.json
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/hermes-companion
+
+[Install]
+WantedBy=default.target

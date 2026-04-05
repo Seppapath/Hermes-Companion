@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Hermes Companion",
+  "version": "0.1.0",
+  "identifier": "com.hermes.companion",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Hermes Companion",
+        "width": 1200,
+        "height": 860,
+        "resizable": true,
+        "fullscreen": false,
+        "minWidth": 920,
+        "minHeight": 720
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "shortDescription": "Secure desktop node for Hermes",
+    "longDescription": "Hermes Companion pairs a minimal chat shell with a background node daemon that securely registers the machine with a central Hermes deployment.",
+    "resources": [
+      "resources/**/*"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    }
+  }
+}

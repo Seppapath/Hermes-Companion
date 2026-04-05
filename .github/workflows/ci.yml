@@ -1,0 +1,132 @@
+name: Companion CI
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  pull_request:
+
+jobs:
+  validate:
+    name: Validate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Python dependencies
+        run: python -m pip install -r daemon/requirements.txt -r central-api/requirements.txt
+
+      - name: Python compile check
+        run: python -m compileall -q daemon central-api central-skill chat-bridge scripts tests
+
+      - name: Frontend checks
+        run: npm run check
+
+      - name: Frontend build
+        run: npm run build
+
+      - name: Rust format check
+        run: cargo fmt --all --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Rust compile check
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Smoke daemon
+        run: python tests/smoke_daemon.py
+
+      - name: Smoke central API
+        run: python tests/smoke_central_api.py
+
+      - name: Smoke chat bridge
+        run: python tests/smoke_chat_bridge.py
+
+      - name: Smoke daemon secure store
+        if: runner.os == 'Windows'
+        run: python tests/smoke_daemon_secure_store.py
+
+      - name: Live end-to-end stack smoke
+        if: runner.os != 'macOS'
+        run: python tests/e2e_live_stack.py
+
+      - name: Tauri environment info
+        run: npx tauri info
+
+      - name: Tauri debug build
+        if: runner.os != 'Linux'
+        run: npx tauri build --debug --no-bundle
+
+      - name: Parse Windows build script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "scripts/build-windows.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+
+      - name: Parse Windows signature assertion script
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "scripts/assert-windows-signatures.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }

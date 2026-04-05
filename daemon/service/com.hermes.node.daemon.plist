@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.hermes.node.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/USERNAME/Library/Application Support/com.hermes.companion/daemon/bin/hermes-node-daemon</string>
+    <string>--config</string>
+    <string>/Users/USERNAME/Library/Application Support/com.hermes.companion/daemon/daemon-config.json</string>
+  </array>
+  <key>KeepAlive</key>
+  <true/>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/USERNAME/Library/Application Support/com.hermes.companion/logs/hermes-node-daemon.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/USERNAME/Library/Application Support/com.hermes.companion/logs/hermes-node-daemon.log</string>
+</dict>
+</plist>

@@ -1,0 +1,23 @@
+[Unit]
+Description=Hermes Companion Safe Chat Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hermes-companion-chat
+Group=hermes-companion-chat
+EnvironmentFile=/etc/hermes-companion/chat-bridge.env
+WorkingDirectory=/opt/hermes-companion
+ExecStart=/bin/sh -lc 'exec "$HERMES_CHAT_BRIDGE_PYTHON" /opt/hermes-companion/chat-bridge/server.py'
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/opt/hermes-companion /opt/hermes-companion-chat
+ReadWritePaths=/var/lib/hermes-companion-chat
+
+[Install]
+WantedBy=multi-user.target
