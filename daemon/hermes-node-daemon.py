@@ -90,7 +90,40 @@ class RuntimeConfig:
     @classmethod
     def load(cls, config_path: Path) -> "RuntimeConfig":
         payload = json.loads(config_path.read_text(encoding="utf-8"))
+        payload = normalize_runtime_config_keys(payload)
         return cls(**payload)
+
+
+def normalize_runtime_config_keys(payload: Dict[str, Any]) -> Dict[str, Any]:
+    key_map = {
+        "clientId": "client_id",
+        "centralName": "central_name",
+        "registrationUrl": "registration_url",
+        "chatHttpUrl": "chat_http_url",
+        "chatWsUrl": "chat_ws_url",
+        "statusWsUrl": "status_ws_url",
+        "heartbeatUrl": "heartbeat_url",
+        "apiToken": "api_token",
+        "chatModel": "chat_model",
+        "nodeName": "node_name",
+        "centralSshPublicKey": "central_ssh_public_key",
+        "sshAuthorizedUser": "ssh_authorized_user",
+        "heartbeatIntervalSeconds": "heartbeat_interval_seconds",
+        "retryIntervalSeconds": "retry_interval_seconds",
+        "statusFile": "status_file",
+        "stateFile": "state_file",
+        "logFile": "log_file",
+        "privateKeyPath": "private_key_path",
+        "publicKeyPath": "public_key_path",
+        "apiTokenKeyringService": "api_token_keyring_service",
+        "apiTokenKeyringAccount": "api_token_keyring_account",
+    }
+
+    normalized = dict(payload)
+    for source, target in key_map.items():
+        if source in normalized and target not in normalized:
+            normalized[target] = normalized.pop(source)
+    return normalized
 
 
 class HermesNodeDaemon:

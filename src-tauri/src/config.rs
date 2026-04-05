@@ -191,7 +191,7 @@ fn write_daemon_runtime_config(
         chat_ws_url: settings.chat_ws_url.clone(),
         status_ws_url: settings.status_ws_url.clone(),
         heartbeat_url: settings.heartbeat_url.clone(),
-        api_token: token_persistence.config_token.clone(),
+        api_token: daemon_runtime_api_token(settings, token_persistence),
         api_token_keyring_service: token_persistence.keyring_service.clone(),
         api_token_keyring_account: token_persistence.keyring_account.clone(),
         chat_model: settings.chat_model.clone(),
@@ -208,6 +208,17 @@ fn write_daemon_runtime_config(
     };
 
     write_json(&paths.daemon_config_path, &runtime_config)
+}
+
+fn daemon_runtime_api_token(
+    settings: &CompanionSettings,
+    token_persistence: &secrets::TokenPersistence,
+) -> String {
+    if !settings.api_token.trim().is_empty() {
+        return settings.api_token.clone();
+    }
+
+    token_persistence.config_token.clone()
 }
 
 fn normalize_settings(mut settings: CompanionSettings, machine: &MachineInfo) -> CompanionSettings {
@@ -311,4 +322,28 @@ fn protect_file(path: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::daemon_runtime_api_token;
+    use crate::{models::CompanionSettings, secrets::TokenPersistence};
+
+    #[test]
+    fn daemon_runtime_prefers_in_memory_token_over_keyring_placeholder() {
+        let settings = CompanionSettings {
+            api_token: "node-token-123".into(),
+            ..CompanionSettings::default()
+        };
+        let persistence = TokenPersistence {
+            config_token: String::new(),
+            keyring_service: "com.hermes.companion.api-token".into(),
+            keyring_account: "client-123".into(),
+        };
+
+        assert_eq!(
+            daemon_runtime_api_token(&settings, &persistence),
+            "node-token-123"
+        );
+    }
 }
