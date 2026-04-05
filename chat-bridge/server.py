@@ -17,7 +17,7 @@ PORT = int(os.environ.get("HERMES_CHAT_BRIDGE_PORT", "8788"))
 BRIDGE_TOKEN = os.environ.get("HERMES_CHAT_BRIDGE_TOKEN", "").strip()
 AGENT_DIR = Path(os.environ.get("HERMES_CHAT_BRIDGE_AGENT_DIR", "")).expanduser()
 HERMES_HOME = Path(os.environ.get("HERMES_CHAT_BRIDGE_HOME", "")).expanduser()
-DEFAULT_MODEL = os.environ.get("HERMES_CHAT_BRIDGE_DEFAULT_MODEL", "gpt-5.4-mini").strip() or "gpt-5.4-mini"
+DEFAULT_MODEL = os.environ.get("HERMES_CHAT_BRIDGE_DEFAULT_MODEL", "gpt-5").strip() or "gpt-5"
 MODEL_PROVIDER = os.environ.get("HERMES_CHAT_BRIDGE_PROVIDER", "").strip() or None
 MODEL_BASE_URL = os.environ.get("HERMES_CHAT_BRIDGE_BASE_URL", "").strip() or None
 WORKSPACE = str(
@@ -103,6 +103,25 @@ def response_payload(answer: str) -> dict[str, Any]:
     }
 
 
+def chat_completions_payload(answer: str, model: str) -> dict[str, Any]:
+    return {
+        "id": f"chatcmpl-{int(time.time() * 1000)}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": answer,
+                },
+                "finish_reason": "stop",
+            }
+        ],
+    }
+
+
 def bridge_health() -> dict[str, Any]:
     return {
         "status": "ok",
@@ -152,7 +171,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         try:
-            if self.path != "/v1/responses":
+            if self.path not in ("/v1/responses", "/v1/chat/completions"):
                 return self._json({"error": "not found"}, status=404)
             if not self._authorized():
                 return self._json({"error": "unauthorized"}, status=401)
@@ -211,6 +230,9 @@ class Handler(BaseHTTPRequestHandler):
                     answer = str(assistant_messages[-1].get("content") or "").strip()
             if not answer:
                 raise RuntimeError("Bridge agent returned no assistant text.")
+
+            if self.path == "/v1/chat/completions":
+                return self._json(chat_completions_payload(answer, model))
 
             return self._json(response_payload(answer))
         except Exception as exc:

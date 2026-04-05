@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,11 @@ from urllib.parse import urljoin
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
+
+
+logger = logging.getLogger("hermes-companion-central")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO)
 
 
 def utc_now() -> datetime:
@@ -254,6 +260,14 @@ HERMES_WEBUI_PROXY_URL = os.environ.get("HERMES_WEBUI_PROXY_URL", "").strip()
 HERMES_WEBUI_PASSWORD = os.environ.get("HERMES_WEBUI_PASSWORD", "").strip()
 HERMES_WEBUI_WORKSPACE = os.environ.get("HERMES_WEBUI_WORKSPACE", "~").strip() or "~"
 ALLOW_UNSAFE_WEBUI_PROXY = os.environ.get("HERMES_ALLOW_UNSAFE_WEBUI_PROXY", "").strip() == "1"
+MEM0_API_URL = os.environ.get("HERMES_MEM0_API_URL", "").strip().rstrip("/")
+MEM0_API_KEY = os.environ.get("HERMES_MEM0_API_KEY", "").strip()
+MEM0_MEMORY_USER_ID = os.environ.get("HERMES_MEMORY_USER_ID", "").strip()
+MEM0_MEMORY_AGENT_ID = os.environ.get("HERMES_MEMORY_AGENT_ID", "central-hermes").strip() or "central-hermes"
+MEM0_MEMORY_APP_ID = os.environ.get("HERMES_MEMORY_APP_ID", "hermes-companion").strip() or "hermes-companion"
+MEM0_SEARCH_LIMIT = max(1, int(os.environ.get("HERMES_MEMORY_SEARCH_LIMIT", "5")))
+MEM0_TIMEOUT_SECONDS = float(os.environ.get("HERMES_MEM0_TIMEOUT_SECONDS", "10"))
+MEM0_WRITE_ENABLED = os.environ.get("HERMES_MEMORY_WRITE_ENABLED", "1").strip() != "0"
 SOCKET_OPERATION_TIMEOUT_SECONDS = float(
     os.environ.get("HERMES_SOCKET_OPERATION_TIMEOUT_SECONDS", "5")
 )
@@ -268,6 +282,11 @@ if HERMES_WEBUI_PROXY_URL and not ALLOW_UNSAFE_WEBUI_PROXY:
         "HERMES_WEBUI_PROXY_URL is disabled by default because a general-purpose Hermes web UI may expose "
         "filesystem and shell tools to enrolled nodes. Use a dedicated no-tools chat bridge instead, or set "
         "HERMES_ALLOW_UNSAFE_WEBUI_PROXY=1 only if you have intentionally hardened that local Hermes instance."
+    )
+if MEM0_API_URL and not MEM0_MEMORY_USER_ID:
+    logger.warning(
+        "HERMES_MEM0_API_URL is set but HERMES_MEMORY_USER_ID is empty. "
+        "Hermes will fall back to request metadata or machine user identity, which may fragment memory across devices."
     )
 
 store = JsonStore(DATA_ROOT)
@@ -325,8 +344,43 @@ def infer_url(request: CreateInviteRequest, request_obj: Request, suffix: str) -
 
 
 @app.get("/api/health")
-def health() -> Dict[str, str]:
-    return {"status": "ok", "timestamp": iso_now()}
+def health() -> Dict[str, Any]:
+    return {
+        "status": "ok",
+        "timestamp": iso_now(),
+        "memoryEnabled": memory_enabled(),
+        "memoryWriteEnabled": MEM0_WRITE_ENABLED,
+    }
+
+
+@app.get("/api/memory/status", dependencies=[Depends(require_admin)])
+async def memory_status() -> Dict[str, Any]:
+    if not memory_enabled():
+        return {
+            "enabled": False,
+            "configured": False,
+            "reachable": False,
+        }
+
+    reachable = False
+    detail = ""
+    try:
+        async with httpx.AsyncClient(timeout=MEM0_TIMEOUT_SECONDS) as client:
+            response = await client.get(MEM0_API_URL or "", headers=memory_request_headers())
+            reachable = response.status_code < 500
+            detail = response.text[:200]
+    except Exception as error:
+        detail = str(error)
+
+    return {
+        "enabled": True,
+        "configured": True,
+        "reachable": reachable,
+        "userId": MEM0_MEMORY_USER_ID,
+        "agentId": MEM0_MEMORY_AGENT_ID,
+        "baseUrl": MEM0_API_URL,
+        "detail": detail,
+    }
 
 
 @app.post("/api/device-invites", dependencies=[Depends(require_admin)])
@@ -532,6 +586,230 @@ def chat_session_key(request: Dict[str, Any], token_record: Dict[str, Any]) -> s
     machine = token_record.get("machine") if isinstance(token_record.get("machine"), dict) else {}
     hostname = str(machine.get("hostname") or "").strip()
     return hostname or "default"
+
+
+def memory_enabled() -> bool:
+    return bool(MEM0_API_URL)
+
+
+def request_metadata(request: Dict[str, Any]) -> Dict[str, Any]:
+    metadata = request.get("metadata")
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def memory_scope(request: Dict[str, Any], token_record: Dict[str, Any]) -> Dict[str, str]:
+    metadata = request_metadata(request)
+    machine = token_record.get("machine") if isinstance(token_record.get("machine"), dict) else {}
+
+    user_id = (
+        str(metadata.get("memory_user_id") or "").strip()
+        or str(metadata.get("user_id") or "").strip()
+        or MEM0_MEMORY_USER_ID
+        or str(machine.get("currentUser") or "").strip()
+        or "hermes-user"
+    )
+    agent_id = (
+        str(metadata.get("memory_agent_id") or "").strip()
+        or str(metadata.get("agent_id") or "").strip()
+        or MEM0_MEMORY_AGENT_ID
+    )
+
+    return {
+        "user_id": user_id,
+        "agent_id": agent_id,
+    }
+
+
+def memory_request_headers() -> Dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if MEM0_API_KEY:
+        headers["X-API-Key"] = MEM0_API_KEY
+    return headers
+
+
+def response_text(value: Dict[str, Any]) -> str:
+    text = str(value.get("output_text") or "").strip()
+    if text:
+        return text
+
+    output = value.get("output")
+    if isinstance(output, list):
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            contents = item.get("content")
+            if isinstance(contents, list):
+                for content in contents:
+                    if not isinstance(content, dict):
+                        continue
+                    text = str(content.get("text") or content.get("output_text") or "").strip()
+                    if text:
+                        return text
+
+    choices = value.get("choices")
+    if isinstance(choices, list) and choices:
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str):
+                return content.strip()
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        text = str(item.get("text") or "").strip()
+                        if text:
+                            return text
+
+    return ""
+
+
+def memory_entry_text(entry: Dict[str, Any]) -> str:
+    for key in ("memory", "text", "content"):
+        value = entry.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def memory_prompt(results: list[Dict[str, Any]]) -> str:
+    lines = []
+    for index, entry in enumerate(results[:MEM0_SEARCH_LIMIT], start=1):
+        text = memory_entry_text(entry)
+        if not text:
+            continue
+        lines.append(f"{index}. {text}")
+
+    if not lines:
+        return ""
+
+    return (
+        "Relevant long-term Hermes memory for this conversation:\n"
+        + "\n".join(lines)
+        + "\n\nUse these memories when they are relevant, but do not treat them as infallible if the current user message conflicts."
+    )
+
+
+def augment_request_with_memory(request: Dict[str, Any], prompt: str) -> Dict[str, Any]:
+    if not prompt:
+        return request
+
+    augmented = json.loads(json.dumps(request))
+
+    if isinstance(augmented.get("input"), list):
+        augmented["input"] = [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": prompt}],
+            },
+            *augmented["input"],
+        ]
+        return augmented
+
+    if isinstance(augmented.get("messages"), list):
+        augmented["messages"] = [
+            {"role": "system", "content": prompt},
+            *augmented["messages"],
+        ]
+        return augmented
+
+    augmented["input"] = [
+        {
+            "role": "system",
+            "content": [{"type": "input_text", "text": prompt}],
+        }
+    ]
+    return augmented
+
+
+async def mem0_search(query: str, scope: Dict[str, str]) -> list[Dict[str, Any]]:
+    if not memory_enabled() or not query.strip():
+        return []
+
+    payload = {
+        "query": query.strip(),
+        "limit": MEM0_SEARCH_LIMIT,
+        **scope,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=MEM0_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{MEM0_API_URL}/search",
+                json=payload,
+                headers=memory_request_headers(),
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception as error:
+        logger.warning("Mem0 search failed: %s", error)
+        return []
+
+    results = data.get("results") if isinstance(data, dict) else data
+    if not isinstance(results, list):
+        return []
+    return [entry for entry in results if isinstance(entry, dict)]
+
+
+def memory_write_payload(
+    request: Dict[str, Any],
+    token_record: Dict[str, Any],
+    scope: Dict[str, str],
+    user_message: str,
+    assistant_message: str,
+) -> Dict[str, Any]:
+    metadata = request_metadata(request)
+    machine = token_record.get("machine") if isinstance(token_record.get("machine"), dict) else {}
+    session_key = chat_session_key(request, token_record)
+
+    memory_metadata = {
+        "app_id": MEM0_MEMORY_APP_ID,
+        "source": "hermes-companion-central-api",
+        "session_key": session_key,
+        "node_hostname": str(machine.get("hostname") or "").strip(),
+        "node_os_type": str(machine.get("osType") or "").strip(),
+        "node_arch": str(machine.get("arch") or "").strip(),
+        "node_user": str(machine.get("currentUser") or "").strip(),
+        "client_id": str(metadata.get("client_id") or "").strip(),
+        "project_id": str(metadata.get("project_id") or "").strip(),
+        "project_name": str(metadata.get("project_name") or metadata.get("project") or "").strip(),
+        "client_name": str(metadata.get("client_name") or "").strip(),
+    }
+    memory_metadata = {key: value for key, value in memory_metadata.items() if value}
+
+    return {
+        "messages": [
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": assistant_message},
+        ],
+        **scope,
+        "metadata": memory_metadata,
+    }
+
+
+async def mem0_store_conversation(
+    request: Dict[str, Any],
+    token_record: Dict[str, Any],
+    scope: Dict[str, str],
+    user_message: str,
+    assistant_message: str,
+) -> None:
+    if not memory_enabled() or not MEM0_WRITE_ENABLED:
+        return
+    if not user_message.strip() or not assistant_message.strip():
+        return
+
+    payload = memory_write_payload(request, token_record, scope, user_message, assistant_message)
+
+    try:
+        async with httpx.AsyncClient(timeout=MEM0_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                f"{MEM0_API_URL}/memories",
+                json=payload,
+                headers=memory_request_headers(),
+            )
+            response.raise_for_status()
+    except Exception as error:
+        logger.warning("Mem0 write failed: %s", error)
 
 
 async def ensure_webui_auth(client: httpx.AsyncClient) -> None:
@@ -749,21 +1027,35 @@ async def reregister_node(node_id: str) -> Dict[str, Any]:
 @app.post("/v1/responses")
 async def responses(request: Dict[str, Any], token: str = Depends(bearer_token)) -> Dict[str, Any]:
     token_record = token_record_from_secret(token)
+    segments = request_segments(request)
+    scope = memory_scope(request, token_record)
+    recalled_memories = await mem0_search(segments["user"], scope)
+    augmented_request = augment_request_with_memory(request, memory_prompt(recalled_memories))
 
     if HERMES_WEBUI_PROXY_URL:
-        return await hermes_webui_response(request, token_record)
+        payload = await hermes_webui_response(augmented_request, token_record)
+        assistant_text = response_text(payload)
+        asyncio.create_task(
+            mem0_store_conversation(request, token_record, scope, segments["user"], assistant_text)
+        )
+        return payload
 
     if RESPONSES_PROXY_URL:
         headers = {}
         if RESPONSES_PROXY_TOKEN:
             headers["Authorization"] = f"Bearer {RESPONSES_PROXY_TOKEN}"
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(RESPONSES_PROXY_URL, json=request, headers=headers)
+            response = await client.post(RESPONSES_PROXY_URL, json=augmented_request, headers=headers)
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+        assistant_text = response_text(payload)
+        asyncio.create_task(
+            mem0_store_conversation(request, token_record, scope, segments["user"], assistant_text)
+        )
+        return payload
 
     user_segments = []
-    for item in request.get("input", []):
+    for item in augmented_request.get("input", []):
         if item.get("role") == "user":
             for content in item.get("content", []):
                 text = content.get("text")
@@ -771,7 +1063,7 @@ async def responses(request: Dict[str, Any], token: str = Depends(bearer_token))
                     user_segments.append(text)
 
     output_text = "Reference central Hermes received: " + " ".join(user_segments).strip()
-    return {
+    payload = {
         "output_text": output_text.strip(),
         "output": [
             {
@@ -780,6 +1072,11 @@ async def responses(request: Dict[str, Any], token: str = Depends(bearer_token))
             }
         ],
     }
+    assistant_text = response_text(payload)
+    asyncio.create_task(
+        mem0_store_conversation(request, token_record, scope, segments["user"], assistant_text)
+    )
+    return payload
 
 
 @app.websocket("/ws/nodes")

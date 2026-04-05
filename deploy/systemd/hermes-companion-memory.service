@@ -1,0 +1,23 @@
+[Unit]
+Description=Hermes Companion Memory Service
+After=network-online.target hermes-companion-chat-bridge.service
+Wants=network-online.target hermes-companion-chat-bridge.service
+
+[Service]
+Type=simple
+User=hermes-companion
+Group=hermes-companion
+EnvironmentFile=/etc/hermes-companion/memory-service.env
+WorkingDirectory=/opt/hermes-companion
+ExecStart=/bin/sh -lc 'exec /opt/hermes-companion/.venv/bin/python -m uvicorn --app-dir /opt/hermes-companion/memory-service server:app --host "$HERMES_MEMORY_BIND_HOST" --port "$HERMES_MEMORY_BIND_PORT" --workers 1'
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/opt/hermes-companion
+ReadWritePaths=/var/lib/hermes-companion-memory
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+services:
+  mem0:
+    image: mem0/mem0-api-server
+    restart: unless-stopped
+    env_file:
+      - ./mem0.env
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  neo4j:
+    image: neo4j:5
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/change-this-password
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    volumes:
+      - neo4j-data:/data
+
+volumes:
+  neo4j-data:

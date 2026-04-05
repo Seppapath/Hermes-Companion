@@ -45,7 +45,7 @@ def main() -> int:
         (auth_home / "auth.json").write_text('{"active_provider":"openai-codex"}\n', encoding="utf-8")
         (auth_home / "config.yaml").write_text(
             "model:\n"
-            "  default: gpt-5.4-mini\n"
+            "  default: gpt-5\n"
             "  provider: openai-codex\n"
             "  base_url: https://chatgpt.com/backend-api/codex\n"
             "platform_toolsets:\n"
@@ -73,7 +73,7 @@ def main() -> int:
         os.environ["HERMES_CHAT_BRIDGE_TOKEN"] = "bridge-secret"
         os.environ["HERMES_CHAT_BRIDGE_AGENT_DIR"] = str(fake_agent_dir)
         os.environ["HERMES_CHAT_BRIDGE_HOME"] = str(auth_home)
-        os.environ["HERMES_CHAT_BRIDGE_DEFAULT_MODEL"] = "gpt-5.4-mini"
+        os.environ["HERMES_CHAT_BRIDGE_DEFAULT_MODEL"] = "gpt-5"
         os.environ["HERMES_CHAT_BRIDGE_PROVIDER"] = "openai-codex"
         os.environ["HERMES_CHAT_BRIDGE_BASE_URL"] = "https://chatgpt.com/backend-api/codex"
         os.environ["HERMES_CHAT_BRIDGE_WORKSPACE"] = tempdir
@@ -101,7 +101,7 @@ def main() -> int:
                 f"{base_url}/v1/responses",
                 token="bridge-secret",
                 payload={
-                    "model": "openai/gpt-5.4-mini",
+                    "model": "openai/gpt-5",
                     "input": [
                         {
                             "role": "system",
@@ -121,9 +121,24 @@ def main() -> int:
             assert invocation["kwargs"]["enabled_toolsets"] == [], invocation
             assert invocation["kwargs"]["provider"] == "openai-codex", invocation
             assert invocation["kwargs"]["base_url"] == "https://chatgpt.com/backend-api/codex", invocation
-            assert invocation["kwargs"]["model"] == "gpt-5.4-mini", invocation
+            assert invocation["kwargs"]["model"] == "gpt-5", invocation
             assert invocation["user_message"] == "Say hello.", invocation
             assert invocation["system_message"] == "You are safe.", invocation
+
+            status, payload = request(
+                f"{base_url}/v1/chat/completions",
+                token="bridge-secret",
+                payload={
+                    "model": "gpt-5",
+                    "messages": [
+                        {"role": "system", "content": "You are safe."},
+                        {"role": "user", "content": "Say hello again."},
+                    ],
+                },
+            )
+            assert status == 200, payload
+            assert payload["object"] == "chat.completion", payload
+            assert payload["choices"][0]["message"]["content"] == "stub-answer", payload
         finally:
             server.shutdown()
             server.server_close()
