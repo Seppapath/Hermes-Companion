@@ -37,7 +37,7 @@ def matches_secret(record: Dict[str, Any], secret: str, *, hash_key: str, legacy
     )
 
 
-DEFAULT_CHAT_MODEL = os.environ.get("HERMES_DEFAULT_CHAT_MODEL", "gpt-4.1-mini").strip() or "gpt-4.1-mini"
+DEFAULT_CHAT_MODEL = os.environ.get("HERMES_DEFAULT_CHAT_MODEL", "gpt-5").strip() or "gpt-5"
 
 
 class MachineInfo(BaseModel):

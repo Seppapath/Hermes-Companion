@@ -44,7 +44,7 @@ impl Default for CompanionSettings {
             status_ws_url: String::new(),
             heartbeat_url: String::new(),
             api_token: String::new(),
-            chat_model: "gpt-4.1-mini".into(),
+            chat_model: "gpt-5".into(),
             central_ssh_public_key: String::new(),
             ssh_authorized_user: String::new(),
             heartbeat_interval_seconds: 60,

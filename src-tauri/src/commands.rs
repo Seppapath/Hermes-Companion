@@ -540,7 +540,7 @@ fn issue_operator_invite(
         request.central_name.trim().to_string()
     };
     let chat_model = if request.chat_model.trim().is_empty() {
-        "gpt-4.1-mini".to_string()
+        "gpt-5".to_string()
     } else {
         request.chat_model.trim().to_string()
     };

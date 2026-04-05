@@ -43,7 +43,7 @@
     statusWsUrl: '',
     heartbeatUrl: '',
     apiToken: '',
-    chatModel: 'gpt-4.1-mini',
+    chatModel: 'gpt-5',
     centralSshPublicKey: '',
     sshAuthorizedUser: '',
     heartbeatIntervalSeconds: 60,
@@ -57,7 +57,7 @@
     sshAuthorizedUser: '',
     expiresInMinutes: 60,
     centralName: 'Central Hermes',
-    chatModel: 'gpt-4.1-mini',
+    chatModel: 'gpt-5',
     note: '',
   }
 
@@ -263,7 +263,7 @@
         ...bootstrap,
         sshAuthorizedUser: bootstrap.sshAuthorizedUser.trim() || machine.currentUser,
         centralName: bootstrap.centralName.trim() || settings.centralName || 'Central Hermes',
-        chatModel: bootstrap.chatModel.trim() || settings.chatModel || 'gpt-4.1-mini',
+        chatModel: bootstrap.chatModel.trim() || settings.chatModel || 'gpt-5',
         note: bootstrap.note.trim() || bootstrapNote(machine, settings.nodeName || machine.hostname),
       })
 
@@ -563,7 +563,7 @@
 
           <label>
             <span>Chat model</span>
-            <input bind:value={bootstrap.chatModel} placeholder="gpt-4.1-mini" />
+            <input bind:value={bootstrap.chatModel} placeholder="gpt-5" />
           </label>
 
           <label>
@@ -784,7 +784,7 @@
 
           <label>
             <span>Chat model</span>
-            <input bind:value={settings.chatModel} placeholder="gpt-4.1-mini" />
+            <input bind:value={settings.chatModel} placeholder="gpt-5" />
           </label>
 
           <label>
